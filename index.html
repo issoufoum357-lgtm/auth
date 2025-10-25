@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Connexion par Téléphone</title>
+  <script src="https://www.gstatic.com/firebasejs/10.3.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.3.1/firebase-auth-compat.js"></script>
+  <style>
+    body { font-family: Arial; display:flex; justify-content:center; align-items:center; height:100vh; background:#f2f2f2; }
+    .container { background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.2); width:300px; }
+    input, button { width:100%; padding:10px; margin:5px 0; border-radius:5px; border:1px solid #ccc; }
+    button { background:orange; color:white; border:none; cursor:pointer; }
+    #otp-section { display:none; }
+    #message { color:red; font-size:0.9em; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Connexion par téléphone</h2>
+
+    <!-- Étape 1 : numéro de téléphone -->
+    <div id="phone-section">
+      <input type="text" id="phone-number" placeholder="+227XXXXXXXX">
+      <div id="recaptcha-container"></div>
+      <button onclick="sendOtp()">Envoyer le code</button>
+    </div>
+
+    <!-- Étape 2 : saisir OTP -->
+    <div id="otp-section">
+      <input type="text" id="otp" placeholder="Entrez le code reçu">
+      <button onclick="verifyOtp()">Vérifier le code</button>
+    </div>
+
+    <p id="message"></p>
+  </div>
+
+  <script>
+    // Configuration Firebase
+    const firebaseConfig = {
+      apiKey: "TON_API_KEY",
+      authDomain: "TON_PROJECT_ID.firebaseapp.com",
+      projectId: "TON_PROJECT_ID",
+      storageBucket: "TON_PROJECT_ID.appspot.com",
+      messagingSenderId: "TON_MESSAGING_SENDER_ID",
+      appId: "TON_APP_ID"
+    };
+
+    // Initialiser Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+
+    let confirmationResult;
+
+    // Configurer reCAPTCHA invisible
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+      'size': 'invisible',
+      'callback': (response) => {
+        console.log("reCAPTCHA résolu");
+      }
+    });
+
+    // Envoyer OTP
+    function sendOtp() {
+      const phoneNumber = document.getElementById('phone-number').value;
+      const appVerifier = window.recaptchaVerifier;
+
+      auth.signInWithPhoneNumber(phoneNumber, appVerifier)
+        .then((result) => {
+          confirmationResult = result;
+          document.getElementById('phone-section').style.display = 'none';
+          document.getElementById('otp-section').style.display = 'block';
+          document.getElementById('message').innerText = 'Code envoyé ! Vérifiez votre téléphone.';
+        })
+        .catch((error) => {
+          console.error(error);
+          document.getElementById('message').innerText = error.message;
+        });
+    }
+
+    // Vérifier OTP
+    function verifyOtp() {
+      const code = document.getElementById('otp').value;
+      confirmationResult.confirm(code)
+        .then((result) => {
+          const user = result.user;
+          document.getElementById('message').style.color = 'green';
+          document.getElementById('message').innerText = `Connecté ! UID: ${user.uid}`;
+        })
+        .catch((error) => {
+          console.error(error);
+          document.getElementById('message').style.color = 'red';
+          document.getElementById('message').innerText = 'Code incorrect ou erreur';
+        });
+    }
+  </script>
+</body>
+</html>
