@@ -2,96 +2,77 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Connexion par Téléphone</title>
-  <script src="https://www.gstatic.com/firebasejs/10.3.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.3.1/firebase-auth-compat.js"></script>
+  <title>Inscription / Connexion - NigerShop</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.32.0/dist/supabase.min.js"></script>
   <style>
-    body { font-family: Arial; display:flex; justify-content:center; align-items:center; height:100vh; background:#f2f2f2; }
-    .container { background:white; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.2); width:300px; }
-    input, button { width:100%; padding:10px; margin:5px 0; border-radius:5px; border:1px solid #ccc; }
-    button { background:orange; color:white; border:none; cursor:pointer; }
-    #otp-section { display:none; }
-    #message { color:red; font-size:0.9em; }
+    body { font-family: Arial; display: flex; justify-content: center; margin-top: 50px; }
+    form { display: flex; flex-direction: column; width: 300px; }
+    input { margin: 5px 0; padding: 10px; }
+    button { padding: 10px; margin-top: 10px; cursor: pointer; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Connexion par téléphone</h2>
 
-    <!-- Étape 1 : numéro de téléphone -->
-    <div id="phone-section">
-      <input type="text" id="phone-number" placeholder="+227XXXXXXXX">
-      <div id="recaptcha-container"></div>
-      <button onclick="sendOtp()">Envoyer le code</button>
-    </div>
+  <div>
+    <h2>Inscription</h2>
+    <form id="signup-form">
+      <input type="email" id="signup-email" placeholder="Email" required />
+      <input type="password" id="signup-password" placeholder="Mot de passe" required />
+      <button type="submit">S’inscrire</button>
+    </form>
 
-    <!-- Étape 2 : saisir OTP -->
-    <div id="otp-section">
-      <input type="text" id="otp" placeholder="Entrez le code reçu">
-      <button onclick="verifyOtp()">Vérifier le code</button>
-    </div>
+    <h2>Connexion</h2>
+    <form id="login-form">
+      <input type="email" id="login-email" placeholder="Email" required />
+      <input type="password" id="login-password" placeholder="Mot de passe" required />
+      <button type="submit">Se connecter</button>
+    </form>
 
-    <p id="message"></p>
+    <div id="message" style="margin-top: 20px; color: red;"></div>
   </div>
 
   <script>
-    // Configuration Firebase
-    const firebaseConfig = {
-      apiKey: "AIzaSyDcmP9_rJ1yJ8a5mV0Dy_gzPxBeOJJY2mI",
-      authDomain: "https://issoufoum357-lgtm.github.io/auth/",
-      projectId: "auth-b6b05",
-      storageBucket: "TON_PROJECT_ID.appspot.com",
-      messagingSenderId: "TON_MESSAGING_SENDER_ID",
-      appId: "TON_APP_ID"
-    };
+    // 1️⃣ Initialiser Supabase
+    const SUPABASE_URL = 'https://xyzcompany.supabase.co';
+    const SUPABASE_ANON_KEY = 'public-anon-key';
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Initialiser Firebase
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
+    const messageDiv = document.getElementById('message');
 
-    let confirmationResult;
+    // 2️⃣ Inscription
+    document.getElementById('signup-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('signup-email').value;
+      const password = document.getElementById('signup-password').value;
 
-    // Configurer reCAPTCHA invisible
-    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-      'size': 'invisible',
-      'callback': (response) => {
-        console.log("reCAPTCHA résolu");
+      const { data, error } = await supabase.auth.signUp({ email, password });
+
+      if (error) {
+        messageDiv.textContent = error.message;
+      } else {
+        messageDiv.style.color = 'green';
+        messageDiv.textContent = 'Inscription réussie ! Vérifiez votre email pour confirmer.';
       }
     });
 
-    // Envoyer OTP
-    function sendOtp() {
-      const phoneNumber = document.getElementById('phone-number').value;
-      const appVerifier = window.recaptchaVerifier;
+    // 3️⃣ Connexion
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
 
-      auth.signInWithPhoneNumber(phoneNumber, appVerifier)
-        .then((result) => {
-          confirmationResult = result;
-          document.getElementById('phone-section').style.display = 'none';
-          document.getElementById('otp-section').style.display = 'block';
-          document.getElementById('message').innerText = 'Code envoyé ! Vérifiez votre téléphone.';
-        })
-        .catch((error) => {
-          console.error(error);
-          document.getElementById('message').innerText = error.message;
-        });
-    }
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    // Vérifier OTP
-    function verifyOtp() {
-      const code = document.getElementById('otp').value;
-      confirmationResult.confirm(code)
-        .then((result) => {
-          const user = result.user;
-          document.getElementById('message').style.color = 'green';
-          document.getElementById('message').innerText = `Connecté ! UID: ${user.uid}`;
-        })
-        .catch((error) => {
-          console.error(error);
-          document.getElementById('message').style.color = 'red';
-          document.getElementById('message').innerText = 'Code incorrect ou erreur';
-        });
-    }
+      if (error) {
+        messageDiv.style.color = 'red';
+        messageDiv.textContent = error.message;
+      } else {
+        messageDiv.style.color = 'green';
+        messageDiv.textContent = 'Connexion réussie ✅';
+        console.log('Utilisateur connecté :', data.user);
+      }
+    });
   </script>
+
 </body>
 </html>
