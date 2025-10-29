@@ -1,78 +1,374 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Inscription / Connexion - NigerShop</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.32.0/dist/supabase.min.js"></script>
+  <meta charset="utf-8" />
+  <title>NigerShop — Prototype Cartes & Wallet (Admin)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- Style simple bleu/orange moderne -->
   <style>
-    body { font-family: Arial; display: flex; justify-content: center; margin-top: 50px; }
-    form { display: flex; flex-direction: column; width: 300px; }
-    input { margin: 5px 0; padding: 10px; }
-    button { padding: 10px; margin-top: 10px; cursor: pointer; }
+    :root{
+      --blue:#0b5ea8;
+      --orange:#ff8a00;
+      --muted:#f3f6fb;
+      font-family: Inter, Roboto, Arial, sans-serif;
+    }
+    body{margin:0;background:var(--muted);color:#222}
+    header{background:linear-gradient(90deg,var(--blue),#0a78c6);color:white;padding:18px 20px;display:flex;align-items:center;gap:12px}
+    header h1{margin:0;font-size:20px}
+    .container{padding:18px;max-width:1100px;margin:18px auto}
+    .card{background:white;border-radius:12px;padding:16px;box-shadow:0 6px 18px rgba(10,10,30,0.06);margin-bottom:16px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    label{display:block;font-size:13px;margin-bottom:6px;color:#444}
+    input,select,textarea,button{font-size:15px;padding:10px;border-radius:8px;border:1px solid #e0e6ef}
+    button.primary{background:var(--orange);border:none;color:white;padding:10px 14px;border-radius:8px;cursor:pointer}
+    button.ghost{background:#fff;border:1px solid #dbe7fb;color:var(--blue);cursor:pointer}
+    .tabs{display:flex;gap:8px;margin-bottom:12px}
+    .tabs button{padding:8px 12px;border-radius:8px;border:none;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.03);cursor:pointer}
+    .tabs button.active{background:linear-gradient(90deg,var(--blue),#0a78c6);color:white}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+    .small{font-size:13px;color:#666}
+    #qrCanvas{padding:8px;background:#fff;border-radius:8px;display:inline-block}
+    pre{white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:8px;border:1px solid #eef5ff}
   </style>
+
+  <!-- Firebase (compat pour usage direct CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+  <!-- QR code generator -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <!-- HTML5 QR scanner -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
 </head>
 <body>
+  <header>
+    <img src="" alt="" style="width:36px;height:36px;border-radius:6px;background:rgba(255,255,255,0.12);padding:6px" />
+    <h1>NigerShop — Prototype Admin Cartes & Wallet</h1>
+  </header>
 
-  <div>
-    <h2>Inscription</h2>
-    <form id="signup-form">
-      <input type="email" id="signup-email" placeholder="Email" required />
-      <input type="password" id="signup-password" placeholder="Mot de passe" required />
-      <button type="submit">S’inscrire</button>
-    </form>
+  <div class="container">
+    <div class="card">
+      <div class="tabs">
+        <button id="tab-create" class="active">Créer carte</button>
+        <button id="tab-assign">Associer carte</button>
+        <button id="tab-scan">Scanner QR</button>
+        <button id="tab-user">Voir wallet utilisateur</button>
+      </div>
 
-    <h2>Connexion</h2>
-    <form id="login-form">
-      <input type="email" id="login-email" placeholder="Email" required />
-      <input type="password" id="login-password" placeholder="Mot de passe" required />
-      <button type="submit">Se connecter</button>
-    </form>
+      <!-- CREATE CARD -->
+      <div id="panel-create" class="panel">
+        <div class="grid">
+          <div class="card">
+            <h3>Générer une carte physique</h3>
+            <p class="small">Génère un numéro unique de carte et l'enregistre dans Firestore (collection <code>cards</code>).</p>
+            <label>Préfixe (ex: NS-2025)</label>
+            <input id="prefix" value="NS-2025" />
+            <div style="height:12px"></div>
+            <button id="btn-generate" class="primary">Générer carte</button>
+            <div style="height:12px"></div>
+            <div id="generated" style="display:none">
+              <p><strong>Numéro :</strong> <span id="generated-number"></span></p>
+              <div id="qrCanvas"></div>
+              <div style="height:12px"></div>
+              <button id="btn-save-card" class="primary">Enregistrer dans Firestore</button>
+              <div style="height:8px"></div>
+              <div id="save-result" class="small"></div>
+            </div>
+          </div>
 
-    <div id="message" style="margin-top: 20px; color: red;"></div>
+          <div class="card">
+            <h3>Créer en masse (script rapide)</h3>
+            <p class="small">Saisis un nombre et clique pour créer plusieurs cartes (pour impression ultérieure).</p>
+            <label>Nombre de cartes</label>
+            <input id="bulk-count" type="number" value="5" />
+            <div style="height:12px"></div>
+            <button id="btn-bulk" class="ghost">Créer en masse</button>
+            <div id="bulk-result" style="margin-top:8px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ASSIGN CARD -->
+      <div id="panel-assign" class="panel" style="display:none">
+        <div class="grid">
+          <div class="card">
+            <h3>Associer une carte à un utilisateur</h3>
+            <label>Rechercher utilisateur (email ou téléphone)</label>
+            <input id="search-user" placeholder="email ou téléphone" />
+            <div style="height:10px"></div>
+            <button id="btn-search-user" class="primary">Rechercher</button>
+            <div id="user-search-result" style="margin-top:10px"></div>
+          </div>
+
+          <div class="card">
+            <h3>Associer</h3>
+            <label>Numéro de carte</label>
+            <input id="assign-card-number" placeholder="NS-2025-XXXXX" />
+            <label>UID utilisateur (ou sélectionner ci-dessus)</label>
+            <input id="assign-user-uid" placeholder="uid utilisateur" />
+            <div style="height:12px"></div>
+            <button id="btn-assign" class="primary">Associer la carte</button>
+            <div id="assign-result" style="margin-top:8px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCAN -->
+      <div id="panel-scan" class="panel" style="display:none">
+        <div class="grid">
+          <div class="card">
+            <h3>Scanner QR (caméra)</h3>
+            <p class="small">Scanner le QR code imprimé sur la carte physique.</p>
+            <div id="reader" style="width:100%;min-height:240px"></div>
+            <div style="height:10px"></div>
+            <button id="btn-stop-scan" class="ghost">Arrêter scanner</button>
+            <div id="scan-result" style="margin-top:10px"></div>
+          </div>
+
+          <div class="card">
+            <h3>Test manuel</h3>
+            <label>Entrer numéro de carte</label>
+            <input id="manual-card" placeholder="NS-2025-XXXXX" />
+            <div style="height:10px"></div>
+            <button id="btn-manual-lookup" class="primary">Rechercher carte</button>
+            <div id="manual-result" style="margin-top:10px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- USER WALLET -->
+      <div id="panel-user" class="panel" style="display:none">
+        <div class="card">
+          <h3>Voir wallet utilisateur</h3>
+          <label>UID utilisateur</label>
+          <input id="view-uid" placeholder="uid utilisateur" />
+          <div style="height:10px"></div>
+          <button id="btn-view-wallet" class="primary">Afficher solde</button>
+          <div id="wallet-result" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="card">
+      <h3>Notes / Logs</h3>
+      <pre id="log" style="height:160px;overflow:auto"></pre>
+    </div>
   </div>
 
-  <script>
-    // 1️⃣ Initialiser Supabase
-    const SUPABASE_URL = 'https://cotyovcbiddkkvbagctp.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvdHlvdmNiaWRka2t2YmFnY3RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0MjI1NzIsImV4cCI6MjA3Njk5ODU3Mn0.9fgf6tHODsSknlSYoIDcwZ2RBiGtGIZfUSDhlCnaeK4';
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+<script>
+/* *******************************
+  CONFIG FIREBASE -> Remplace ici
+  Récupère ta config depuis Firebase Console
+*********************************/
+const firebaseConfig = {
+  // <-- REMPLACE PAR TA FIREBASE CONFIG -->
+  apiKey: "AIzaSyDcmP9_rJ1yJ8a5mV0Dy_gzPxBeOJJY2mI",
+  authDomain: "FIREBASE_AUTHDOMAIN",
+  projectId: "auth-b6b05",
+  // ...
+};
 
-    const messageDiv = document.getElementById('message');
+// Initialisation
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
 
-    // 2️⃣ Inscription
-    document.getElementById('signup-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('signup-email').value;
-      const password = document.getElementById('signup-password').value;
+/* Petit logger */
+function log(msg){ const p=document.getElementById('log'); p.textContent = new Date().toLocaleTimeString() + ' — ' + msg + '\n' + p.textContent; }
 
-      const { data, error } = await supabase.auth.signUp({ email, password });
+/* ---------- Tabs ---------- */
+const tabs = ['create','assign','scan','user'];
+tabs.forEach(t=>{
+  document.getElementById('tab-'+t).addEventListener('click', ()=>{
+    tabs.forEach(x=>{ document.getElementById('tab-'+x).classList.remove('active'); document.getElementById('panel-'+x).style.display='none'; });
+    document.getElementById('tab-'+t).classList.add('active');
+    document.getElementById('panel-'+t).style.display='block';
+  });
+});
 
-      if (error) {
-        messageDiv.textContent = error.message;
-      } else {
-        messageDiv.style.color = 'green';
-        messageDiv.textContent = 'Inscription réussie ! Vérifiez votre email pour confirmer.';
-      }
+/* ---------- Générer numéro carte ---------- */
+function shortId(len=5){
+  const ch='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let s=''; for(let i=0;i<len;i++) s+=ch[Math.floor(Math.random()*ch.length)];
+  return s;
+}
+document.getElementById('btn-generate').addEventListener('click', ()=>{
+  const prefix = (document.getElementById('prefix').value || 'NS-2025').toUpperCase();
+  const num = `${prefix}-${shortId(5)}`;
+  document.getElementById('generated-number').textContent = num;
+  document.getElementById('generated').style.display='block';
+  // generate QR
+  document.getElementById('qrCanvas').innerHTML = '';
+  new QRCode(document.getElementById('qrCanvas'), {
+    text: num,
+    width: 160, height: 160
+  });
+  log('Carte générée: '+num);
+});
+
+/* ---------- Enregistrer carte dans Firestore ---------- */
+document.getElementById('btn-save-card').addEventListener('click', async ()=>{
+  const num = document.getElementById('generated-number').textContent;
+  if(!num){ alert('Génère d\'abord'); return; }
+  const docRef = db.collection('cards').doc(num);
+  try{
+    await docRef.set({
+      cardNumber: num,
+      status: 'unassigned',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    document.getElementById('save-result').textContent = 'Carte enregistrée dans Firestore';
+    log('Carte enregistrée: '+num);
+  }catch(e){ console.error(e); document.getElementById('save-result').textContent = 'Erreur: '+e.message; }
+});
 
-    // 3️⃣ Connexion
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('login-email').value;
-      const password = document.getElementById('login-password').value;
+/* ---------- Bulk create ---------- */
+document.getElementById('btn-bulk').addEventListener('click', async ()=>{
+  const count = parseInt(document.getElementById('bulk-count').value) || 1;
+  const prefix = (document.getElementById('prefix').value || 'NS-2025').toUpperCase();
+  const list=[];
+  for(let i=0;i<count;i++){
+    const num=`${prefix}-${shortId(5)}`;
+    list.push(num);
+    db.collection('cards').doc(num).set({
+      cardNumber: num,
+      status: 'unassigned',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(e=>log('Erreur bulk '+e.message));
+  }
+  document.getElementById('bulk-result').innerHTML = 'Créé: ' + list.join(', ');
+  log('Bulk créé: '+list.length+' cartes');
+});
 
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+/* ---------- Rechercher utilisateur (email ou phone) ---------- */
+document.getElementById('btn-search-user').addEventListener('click', async ()=>{
+  const q = document.getElementById('search-user').value.trim();
+  if(!q) return alert('Entre email ou téléphone');
+  document.getElementById('user-search-result').textContent = 'Recherche...';
+  try{
+    let snap = await db.collection('users').where('email','==',q).get();
+    if(snap.empty){
+      snap = await db.collection('users').where('phone','==',q).get();
+    }
+    if(snap.empty){
+      document.getElementById('user-search-result').textContent = 'Utilisateur non trouvé';
+      log('Recherche utilisateur échouée: '+q);
+      return;
+    }
+    const doc = snap.docs[0];
+    const data = doc.data();
+    document.getElementById('user-search-result').innerHTML = `<div><strong>${data.email||data.phone}</strong> (uid: ${doc.id})</div>`;
+    document.getElementById('assign-user-uid').value = doc.id;
+    log('Utilisateur trouvé: '+doc.id);
+  }catch(e){ console.error(e); document.getElementById('user-search-result').textContent = 'Erreur: '+e.message; }
+});
 
-      if (error) {
-        messageDiv.style.color = 'red';
-        messageDiv.textContent = error.message;
-      } else {
-        messageDiv.style.color = 'green';
-        messageDiv.textContent = 'Connexion réussie ✅';
-        console.log('Utilisateur connecté :', data.user);
-      }
-    });
-  </script>
+/* ---------- Associer carte ---------- */
+document.getElementById('btn-assign').addEventListener('click', async ()=>{
+  const cardNum = document.getElementById('assign-card-number').value.trim();
+  const userUid = document.getElementById('assign-user-uid').value.trim();
+  if(!cardNum || !userUid) return alert('Carte et UID requis');
+  try{
+    const cardRef = db.collection('cards').doc(cardNum);
+    const cardSnap = await cardRef.get();
+    if(!cardSnap.exists){ alert('Carte introuvable'); return; }
+    await cardRef.update({ ownerUid: userUid, status: 'active', assignedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await db.collection('users').doc(userUid).update({ cardNumber: cardNum });
+    document.getElementById('assign-result').textContent = 'Associe avec succès';
+    log('Carte '+cardNum+' associée à '+userUid);
+  }catch(e){ console.error(e); document.getElementById('assign-result').textContent='Erreur: '+e.message; }
+});
+
+/* ---------- Scan QR (html5-qrcode) ---------- */
+let html5QrcodeScanner = null;
+document.getElementById('btn-manual-lookup').addEventListener('click', async ()=>{
+  const c = document.getElementById('manual-card').value.trim();
+  if(!c) return;
+  lookupCard(c, 'manual');
+});
+document.getElementById('btn-stop-scan').addEventListener('click', ()=>{
+  if(html5QrcodeScanner) html5QrcodeScanner.stop().then(()=>log('Scanner arrêté')).catch(()=>{});
+});
+
+function startScanner(){
+  const readerId = "reader";
+  const config = { fps: 10, qrbox: 250 };
+  html5QrcodeScanner = new Html5Qrcode(readerId);
+  html5QrcodeScanner.start(
+    { facingMode: "environment" },
+    config,
+    (decodedText, decodedResult) => {
+      // decodedText = the QR code text
+      log('QR detecté: '+decodedText);
+      lookupCard(decodedText, 'scan');
+      html5QrcodeScanner.pause(); // pause pour éviter multiples lectures
+    },
+    (errorMessage) => {
+      // ignore
+    }
+  ).catch(err=>{ log('Erreur scanner: '+err); });
+}
+
+function lookupCard(cardNumber, source){
+  document.getElementById(source==='scan'?'scan-result':'manual-result').textContent = 'Recherche...';
+  db.collection('cards').doc(cardNumber).get().then(doc=>{
+    if(!doc.exists){ 
+      const target = source==='scan'?'scan-result':'manual-result';
+      document.getElementById(target).textContent = 'Carte invalide';
+      log('Carte non trouvée: '+cardNumber);
+      return;
+    }
+    const d = doc.data();
+    if(!d.ownerUid){
+      const target = source==='scan'?'scan-result':'manual-result';
+      document.getElementById(target).textContent = 'Carte non associée';
+      log('Carte non associée: '+cardNumber);
+      return;
+    }
+    // Afficher wallet utilisateur
+    db.collection('users').doc(d.ownerUid).get().then(uSnap=>{
+      const u = uSnap.data();
+      const out = `Utilisateur: ${u.email || u.phone} (uid: ${d.ownerUid})\nSolde: ${u.wallet||0} CFA`;
+      const target = source==='scan'?'scan-result':'manual-result';
+      document.getElementById(target).textContent = out;
+      log('Carte trouvée et wallet affiché: '+cardNumber);
+    }).catch(e=>{ console.error(e); log('Erreur reading user: '+e.message) });
+  }).catch(e=>{ console.error(e); log('Erreur lookup card: '+e.message) });
+}
+
+/* ---------- View wallet (by UID) ---------- */
+document.getElementById('btn-view-wallet').addEventListener('click', async ()=>{
+  const uid = document.getElementById('view-uid').value.trim();
+  if(!uid) return alert('UID requis');
+  document.getElementById('wallet-result').textContent = 'Chargement...';
+  try{
+    const snap = await db.collection('users').doc(uid).get();
+    if(!snap.exists){ document.getElementById('wallet-result').textContent = 'Utilisateur introuvable'; return; }
+    const data = snap.data();
+    const html = `<div><strong>${data.email||data.phone}</strong></div>
+      <div>Solde: <strong>${data.wallet||0} CFA</strong></div>
+      <div style="margin-top:8px">Historique:</div>
+      <pre>${JSON.stringify((data.history||[]).slice(-10).reverse(),null,2)}</pre>`;
+    document.getElementById('wallet-result').innerHTML = html;
+    log('Wallet affiché pour '+uid);
+  }catch(e){ console.error(e); document.getElementById('wallet-result').textContent = 'Erreur: '+e.message; }
+});
+
+/* ---------- Start scanner when tab selected ---------- */
+document.getElementById('tab-scan').addEventListener('click', ()=> {
+  setTimeout(()=>{ startScanner(); }, 400);
+});
+
+/* ---------- Auth note ----------
+  Ce prototype suppose que l'admin/agent est déjà authentifié dans Firebase Auth
+  (ex: via console, ou via un simple login UI). Pour tests rapides tu peux signInWithEmailAndPassword ici.
+  Exemple:
+  auth.signInWithEmailAndPassword('agent@nigershop.com','Agent1234').then(()=>log('Connecté'));
+----------------------------------*/
+</script>
 
 </body>
 </html>
